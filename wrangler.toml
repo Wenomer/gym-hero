@@ -1,0 +1,18 @@
+# Cloudflare Pages — статический трекер тренировок
+# Деплой:  npx wrangler pages deploy
+# (первый запуск сам создаст проект "gym-hero" → https://gym-hero.pages.dev)
+name = "gym-hero"
+pages_build_output_dir = "public"
+compatibility_date = "2025-09-04"
+
+# D1 для API (/functions/api). Биндинг доступен как env.DB.
+[[d1_databases]]
+binding = "DB"
+database_name = "gym-hero"
+database_id = "985e041e-aeb9-4b44-b288-7a1636c5e21b"
+
+# Проверка ключей — сервис auth-kit (Worker, entrypoint Vault). Rate-limit неудачных попыток живёт там же.
+[[services]]
+binding = "VAULT"
+service = "auth-kit"
+entrypoint = "Vault"
