@@ -76,6 +76,54 @@ export async function claimResponse(request, env, projectId) {
 }
 
 /**
+ * Пасскеи (WebAuthn), раздел 11 спецификации. Один обработчик на /api/passkey и ниже:
+ *   POST register/begin, register/finish (нужен ключ), POST login/begin, login/finish (без ключа; finish отдаёт обычный ключ),
+ *   GET /api/passkey (свои пасскеи), DELETE /api/passkey/<id>.
+ * Домен (rpId) и источник (origin) берутся из адреса запроса, то есть это домен самого приложения; тело их не задаёт.
+ */
+export async function passkeyResponse(request, env, projectId) {
+  const url = new URL(request.url);
+  const m = /^\/api\/passkey(?:\/(register|login)\/(begin|finish)|\/(\d{1,9}))?\/?$/.exec(url.pathname);
+  if (!m) return json({ error: "not_found" }, 404);
+  const [, area, step, idText] = m;
+  const want = idText ? "DELETE" : area ? "POST" : "GET";
+  if (request.method !== want) return json({ error: "method_not_allowed" }, 405, { Allow: want });
+  if (!env.VAULT) return json({ error: "no_vault_binding" }, 500);
+
+  const ip = request.headers.get("CF-Connecting-IP") || undefined;
+  const rp = { id: url.hostname, origin: url.origin };
+  let body = {};
+  if (want === "POST") {
+    let text = "";
+    try { text = await request.text(); } catch {}
+    if (text.length > 20000) return json({ error: "invalid_passkey" }, 400);
+    try { body = JSON.parse(text || "{}") || {}; } catch { return json({ error: "invalid_passkey" }, 400); }
+  }
+
+  const needKey = !(area === "login");
+  const key = bearerKey(request);
+  if (needKey && !key) return json({ error: "unauthorized" }, 401);
+
+  let r;
+  try {
+    if (idText) r = await env.VAULT.passkeyRemove(key, projectId, Number(idText), ip);
+    else if (!area) r = await env.VAULT.passkeyList(key, projectId, ip);
+    else if (area === "register" && step === "begin") r = await env.VAULT.passkeyRegisterBegin(key, projectId, rp, ip);
+    else if (area === "register") r = await env.VAULT.passkeyRegisterFinish(key, projectId, rp, body.name, body.credential, ip);
+    else if (step === "begin") r = await env.VAULT.passkeyLoginBegin(projectId, rp);
+    else r = await env.VAULT.passkeyLoginFinish(projectId, rp, body.credential, ip);
+  } catch {
+    return json({ error: "auth_unavailable" }, 503);
+  }
+  if ("limited" in r) return json({ error: "rate_limited" }, 429, { "Retry-After": "60" });
+  if ("error" in r) {
+    const status = { unauthorized: 401, passkey_forbidden: 403, passkey_limit: 409, invalid_passkey: 400, not_found: 404 }[r.error] || 400;
+    return json({ error: r.error }, status);
+  }
+  return json(r.ok);
+}
+
+/**
  * Тело ответа GET /api/me. Поля фиксированы, клиент auth-core.js рассчитывает именно на них.
  * user_id: строка с userId из auth-kit (в таблицах приложения user_id текстовый).
  * Для ключа имперсонации user_id/name/role это человек, под которым зашли; impersonatedBy: {userId, name} админа-владельца.

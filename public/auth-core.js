@@ -69,6 +69,26 @@
     scanNoCode: "QR-код входа не найден. Наведи камеру на код из админки.",
     codeInvalid: "Код не подошёл, истёк или уже использован. Попроси администратора выдать новый.",
     sessionBlocked: "Браузер не сохранил вход. Разрешите cookie для этого сайта",
+    passkeyOfferTitle: "Входить без ключа?",
+    passkeyOfferText: "Создай пасскей: в следующий раз вход по отпечатку, лицу или коду экрана, без ввода ключа.",
+    passkeyCreate: "Создать пасскей",
+    passkeyLater: "Не сейчас",
+    passkeyNever: "Больше не предлагать",
+    passkeyLogin: "Войти с пасскеем",
+    passkeyCreated: "Пасскей создан. Теперь можно входить без ключа.",
+    passkeyFailed: "Не удалось создать или проверить пасскей. Попробуй ещё раз или войди ключом.",
+    passkeyUnknown: "Пасскей не подошёл. Войди ключом или кодом.",
+    passkeyLimit: "Достигнут предел пасскеев (5). Удали ненужный в настройках.",
+    passkeyListTitle: "Пасскеи",
+    passkeyNone: "Пасскеев нет.",
+    passkeyRemove: "Удалить",
+    passkeyRemoveConfirm: "Удалить пасскей? Вход им перестанет работать.",
+    passkeyRemoved: "Пасскей удалён.",
+    passkeyMetaCreated: "создан {date}",
+    passkeyMetaUsed: "вход {date}",
+    passkeyDeviceIos: "iPhone или iPad",
+    passkeyDeviceAndroid: "Android",
+    passkeyDeviceDesktop: "Компьютер",
   };
   /* TEXTS:END */
 
@@ -130,7 +150,7 @@
     /* ---- состояние ---- */
     let ME = null; // кто вошёл: ответ /api/me
     let RETURNING = false; // идёт автопереключение при отказе ключа: экран ввода не показывать
-    let state = { phase: "starting", me: null, readonly: false, lock: { message: "", kind: "", checking: false, canRetry: false }, bar: null, card: null };
+    let state = { phase: "starting", me: null, readonly: false, lock: { message: "", kind: "", checking: false, canRetry: false, passkey: { show: false, primary: false, label: T.passkeyLogin } }, bar: null, card: null, offer: null };
     const subs = new Set(), toastSubs = new Set(), readySubs = new Set();
     const emit = (set, v) => set.forEach((f) => { try { f(v); } catch (e) { if (root.console) console.error(e); } });
     function setState(patch) { state = { ...state, ...patch }; emit(subs, state); }
@@ -176,6 +196,8 @@
         canAddKey: !!admin, // добавлять чужие ключи может тот, у кого на устройстве есть собственный ключ админа
         logoutLabel: T.logout,
         addKeyLabel: T.addKey,
+        // Пасскеи только у человека со своим обычным ключом (INTEGRATION.md §11.4); список приходит из listPasskeys()
+        passkeys: !by && !ro && webauthnSupported() ? { title: T.passkeyListTitle, createLabel: T.passkeyCreate, noneText: T.passkeyNone } : null,
       };
       return { bar, card };
     }
@@ -189,7 +211,11 @@
 
     // Состояние экрана ввода. kind: "error" (сообщение об ошибке), "info" (идёт проверка), "" (сообщения нет).
     // canRetry: на устройстве есть сохранённый ключ, значит можно показать «Попробовать ещё раз».
-    const lockState = (message, kind, checking) => ({ message: message || "", kind: message ? kind : "", checking: !!checking, canRetry: !!getKey() });
+    // passkey: кнопка «Войти с пасскеем»; primary: на этом устройстве пасскей уже создавали, кнопка главная (§11.3)
+    const lockState = (message, kind, checking) => ({
+      message: message || "", kind: message ? kind : "", checking: !!checking, canRetry: !!getKey(),
+      passkey: { show: webauthnSupported(), primary: !!pkStore().made, label: T.passkeyLogin },
+    });
     function showLock(message) {
       setState({ phase: "locked", lock: lockState(message, "error", false) });
     }
@@ -282,10 +308,173 @@
       return { ok: true, key: body.key };
     }
 
+    /* ---- пасскеи (INTEGRATION.md §11) ---- */
+    // Пасскей это ещё один способ получить обычный ключ: дальше всё как при вводе ключа. Закрытое системное окно не ошибка и ничего не показывает.
+    const PK_LS = cfg.storagePrefix + "_pk"; // { made: true, later: время, never: true }
+    const PK_LATER_MS = 30 * 24 * 3600 * 1000;
+    const pkStore = () => { try { const v = JSON.parse(lsGet(PK_LS) || "{}"); return v && typeof v === "object" ? v : {}; } catch { return {}; } };
+    const pkSave = (patch) => lsSet(PK_LS, JSON.stringify({ ...pkStore(), ...patch }));
+    const nav = () => root.navigator;
+    // WebAuthn есть, страница на HTTPS и не во фрейме
+    function webauthnSupported() {
+      const n = nav();
+      return !!(root.PublicKeyCredential && n && n.credentials && n.credentials.create && n.credentials.get
+        && root.isSecureContext !== false && (!root.top || root.top === root.self));
+    }
+    // Есть ли смысл предлагать создать пасскей: поддержка плюс платформенный аутентификатор с проверкой владельца
+    async function passkeyAvailable() {
+      if (!webauthnSupported()) return false;
+      try { return !!(await root.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()); } catch { return false; }
+    }
+    const b64uToBuf = (s) => {
+      const p = String(s).replace(/-/g, "+").replace(/_/g, "/");
+      const bin = root.atob(p + "=".repeat((4 - (p.length % 4)) % 4));
+      const out = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+      return out.buffer;
+    };
+    const bufToB64u = (buf) => {
+      let s = "";
+      for (const x of new Uint8Array(buf)) s += String.fromCharCode(x);
+      return root.btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    };
+    // Короткое имя устройства: только один из трёх текстов (§11.5)
+    function deviceName() {
+      const n = nav() || {}, ua = n.userAgent || "";
+      if (/iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && n.maxTouchPoints > 1)) return T.passkeyDeviceIos;
+      return /Android/.test(ua) ? T.passkeyDeviceAndroid : T.passkeyDeviceDesktop;
+    }
+    async function pkCall(path, { method = "POST", body, auth } = {}) {
+      let res;
+      try {
+        res = await root.fetch(cfg.apiBase + "/passkey" + path, {
+          method, cache: "no-store",
+          headers: { "Content-Type": "application/json", ...(auth ? { Authorization: "Bearer " + getKey() } : {}) },
+          body: body === undefined ? undefined : JSON.stringify(body),
+        });
+      } catch { return { status: 0, json: null }; }
+      return { status: res.status, json: await res.json().catch(() => null) };
+    }
+    const pkProblem = (r) =>
+      r.status === 0 ? T.lockOffline : r.status === 429 ? T.tooManyAttempts
+        : r.json && r.json.error === "passkey_limit" ? T.passkeyLimit : r.status >= 500 ? T.unavailable : T.passkeyFailed;
+    const pkCancelled = (e) => !!e && (e.name === "NotAllowedError" || e.name === "AbortError");
+
+    // Создать пасскей (нужен вход своим ключом). Возвращает { ok: true } или { ok: false, error }: error это готовый текст или null (человек закрыл окно).
+    async function createPasskey() {
+      if (!webauthnSupported()) return { ok: false, error: T.passkeyFailed };
+      const b = await pkCall("/register/begin", { body: {}, auth: true });
+      const o = b.status === 200 && b.json ? b.json.options : null;
+      if (!o) return { ok: false, error: pkProblem(b) };
+      let cred;
+      try {
+        cred = await nav().credentials.create({
+          publicKey: {
+            ...o, challenge: b64uToBuf(o.challenge), user: { ...o.user, id: b64uToBuf(o.user.id) },
+            excludeCredentials: (o.excludeCredentials || []).map((c) => ({ ...c, id: b64uToBuf(c.id) })),
+          },
+        });
+      } catch (e) { return { ok: false, error: pkCancelled(e) ? null : T.passkeyFailed }; }
+      if (!cred) return { ok: false, error: null };
+      const r = cred.response;
+      const f = await pkCall("/register/finish", {
+        auth: true,
+        body: {
+          name: deviceName(),
+          credential: {
+            id: cred.id, rawId: bufToB64u(cred.rawId), type: cred.type,
+            response: { clientDataJSON: bufToB64u(r.clientDataJSON), attestationObject: bufToB64u(r.attestationObject) },
+            transports: typeof r.getTransports === "function" ? r.getTransports() : [],
+          },
+        },
+      });
+      if (f.status !== 200) return { ok: false, error: pkProblem(f) };
+      pkSave({ made: true });
+      setState({ offer: null });
+      toast(T.passkeyCreated);
+      return { ok: true };
+    }
+
+    // Вход по пасскею (экран ввода): подтверждение владельца -> обычный ключ -> проверка и вход, как при вводе ключа.
+    async function loginWithPasskey() {
+      const lockError = (error) => { if (error) setState({ lock: lockState(error, "error", false) }); return { ok: false, error }; };
+      if (!webauthnSupported()) return lockError(T.passkeyFailed);
+      const b = await pkCall("/login/begin", { body: {} });
+      const o = b.status === 200 && b.json ? b.json.options : null;
+      if (!o) return lockError(pkProblem(b));
+      let cred;
+      try {
+        cred = await nav().credentials.get({
+          publicKey: { ...o, challenge: b64uToBuf(o.challenge), allowCredentials: (o.allowCredentials || []).map((c) => ({ ...c, id: b64uToBuf(c.id) })) },
+        });
+      } catch (e) { return lockError(pkCancelled(e) ? null : T.passkeyFailed); }
+      if (!cred) return lockError(null);
+      setState({ lock: lockState(T.checking, "info", true) });
+      const r = cred.response;
+      const f = await pkCall("/login/finish", {
+        body: {
+          credential: {
+            id: cred.id, rawId: bufToB64u(cred.rawId), type: cred.type,
+            response: {
+              clientDataJSON: bufToB64u(r.clientDataJSON), authenticatorData: bufToB64u(r.authenticatorData), signature: bufToB64u(r.signature),
+              userHandle: r.userHandle ? bufToB64u(r.userHandle) : undefined,
+            },
+          },
+        },
+      });
+      const key = f.status === 200 && f.json && typeof f.json.key === "string" ? f.json.key : "";
+      if (!key) return lockError(f.status === 400 ? T.passkeyUnknown : pkProblem(f));
+      pkSave({ made: true });
+      setKey(key); // как при коде: ключ виден один раз, сохраняем до проверки, чтобы «Попробовать ещё раз» проверил его
+      await checkStored();
+      return state.phase === "ready" ? { ok: true } : { ok: false, error: state.lock.message };
+    }
+
+    // Список своих пасскеев для карточки в настройках: готовые строки (имя, «создан …· вход …»)
+    async function listPasskeys() {
+      const r = await pkCall("", { method: "GET", auth: true });
+      if (r.status !== 200 || !Array.isArray(r.json)) return { ok: false, error: pkProblem(r) };
+      const date = (ms) => new Date(ms).toLocaleDateString("ru-RU");
+      return {
+        ok: true,
+        canCreate: r.json.length < 5,
+        items: r.json.map((p) => ({
+          id: p.id,
+          name: p.name || "",
+          sub: [fill(T.passkeyMetaCreated, { date: date(p.created_at) }), p.last_used_at ? fill(T.passkeyMetaUsed, { date: date(p.last_used_at) }) : ""].filter(Boolean).join(" · "),
+          removeLabel: T.passkeyRemove,
+        })),
+      };
+    }
+    // «Удалить» пасскей: { text, perform } как у logoutRequest; perform() -> { ok } | { ok: false, error }
+    function removePasskeyRequest(id) {
+      return {
+        text: T.passkeyRemoveConfirm,
+        async perform() {
+          const r = await pkCall("/" + encodeURIComponent(id), { method: "DELETE", auth: true });
+          if (r.status !== 200) return { ok: false, error: pkProblem(r) };
+          toast(T.passkeyRemoved);
+          return { ok: true };
+        },
+      };
+    }
+
+    // Предложение создать пасскей: после входа, который человек сделал сам (ключ, код, QR), не при запуске с сохранённым ключом (§11.2)
+    async function maybeOffer(me) {
+      if (!me || me.impersonate || me.readonly) return;
+      const pk = pkStore();
+      if (pk.never || pk.made || (pk.later && Date.now() - pk.later < PK_LATER_MS)) return;
+      if (!(await passkeyAvailable()) || state.phase !== "ready") return;
+      setState({ offer: { title: T.passkeyOfferTitle, text: T.passkeyOfferText, createLabel: T.passkeyCreate, laterLabel: T.passkeyLater, neverLabel: T.passkeyNever } });
+    }
+    const passkeyOfferCreate = () => createPasskey(); // успех сам убирает предложение; при ошибке оно остаётся
+    const passkeyOfferLater = () => { pkSave({ later: Date.now() }); setState({ offer: null }); };
+    const passkeyOfferNever = () => { pkSave({ never: true }); setState({ offer: null }); };
+
     /* ---- действия ---- */
     function loggedIn(me) {
       applyMe(me);
-      setState({ phase: "ready", lock: { message: "", kind: "", checking: false, canRetry: false } });
+      setState({ phase: "ready", lock: { ...lockState("", "", false), canRetry: false } });
       emit(readySubs, me);
     }
 
@@ -302,7 +491,8 @@
         if (!c.ok) { setState({ lock: lockState(c.error, "error", false) }); return c; }
         setKey(c.key);
         await checkStored();
-        return state.phase === "ready" ? { ok: true } : { ok: false, error: state.lock.message };
+        if (state.phase === "ready") { maybeOffer(ME); return { ok: true }; }
+        return { ok: false, error: state.lock.message };
       }
       const p = await probe(k);
       if (!p.ok) {
@@ -312,6 +502,7 @@
       }
       setKey(k);
       loggedIn(p.me);
+      maybeOffer(p.me);
       return { ok: true };
     }
 
@@ -397,6 +588,8 @@
       onToast: on(toastSubs),
       onReady: on(readySubs),
       start, retry, notice, submitKey, addKey, claim, api, switchTo, logoutRequest, forgetRequest,
+      passkeySupported: webauthnSupported, passkeyAvailable, createPasskey, loginWithPasskey, listPasskeys, removePasskeyRequest,
+      passkeyOfferCreate, passkeyOfferLater, passkeyOfferNever,
       getKey,
       texts: TEXTS,
     };

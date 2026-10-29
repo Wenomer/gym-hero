@@ -26,7 +26,7 @@
 
   const CSS = `
 .ak-lock{position:fixed;inset:0;z-index:200;background:var(--bg,#0f1115);color:var(--txt,#e8ebf0);display:flex;align-items:center;justify-content:center;padding:24px;font:15px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
-.ak-lock[hidden],.ak-lock-msg[hidden],.ak-retry[hidden],.ak-who[hidden],.ak-as[hidden],.ak-acc-list[hidden],.ak-switch[hidden],.ak-bar[hidden],.ak-bar button[hidden]{display:none!important}
+.ak-lock[hidden],.ak-lock-msg[hidden],.ak-retry[hidden],.ak-who[hidden],.ak-as[hidden],.ak-acc-list[hidden],.ak-switch[hidden],.ak-bar[hidden],.ak-bar button[hidden],.ak-pk[hidden],.ak-pk-box[hidden]{display:none!important}
 .ak-lock-msg{position:absolute;top:calc(env(safe-area-inset-top,0px) + 16px);left:16px;right:16px;max-width:520px;margin:0 auto;padding:12px 14px;border-radius:12px;font-size:14px;text-align:center;background:rgba(255,107,107,.12);border:1px solid var(--danger,#ff6b6b);color:var(--txt,#e8ebf0)}
 .ak-lock-msg.info{background:var(--card2,#20242e);border-color:var(--line,#2a2f3a);color:var(--dim,#8b93a3)}
 .ak-retry{width:100%;margin-top:10px;padding:14px;border-radius:14px;border:1px solid var(--line,#2a2f3a);background:var(--card2,#20242e);color:var(--txt,#e8ebf0);font-weight:700;font-size:15px;cursor:pointer;font-family:inherit}
@@ -81,6 +81,19 @@
 .ak-grab{width:40px;height:4px;background:var(--line,#2a2f3a);border-radius:4px;margin:8px auto 14px}
 .ak-sheet h3{margin:0 0 6px;font-size:16px}
 .ak-hint{font-size:12px;color:var(--dim,#8b93a3);margin:0 0 14px}
+.ak-pk{width:100%;margin-top:10px;padding:14px;border-radius:14px;border:1px solid var(--line,#2a2f3a);background:var(--card2,#20242e);color:var(--txt,#e8ebf0);font-weight:700;font-size:15px;cursor:pointer;font-family:inherit}
+.ak-pk.primary{margin:0 0 14px;background:var(--accent,#5b9dff);border-color:var(--accent,#5b9dff);color:#07142b;font-weight:800;font-size:16px;padding:16px}
+.ak-pk:disabled{opacity:.6;cursor:default}
+.ak-offer-btns{display:flex;flex-direction:column;gap:8px;margin-top:6px}
+.ak-offer-btns .ak-save{margin-top:6px}
+.ak-offer-btns .ak-retry{margin-top:0}
+.ak-link{background:none;border:none;color:var(--dim,#8b93a3);font-size:13px;padding:8px;cursor:pointer;font-family:inherit}
+.ak-pk-box{display:flex;flex-direction:column;gap:8px}
+.ak-pk-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 12px;border:1px solid var(--line,#2a2f3a);border-radius:10px;background:var(--card,#181b22)}
+.ak-pk-row>span{display:flex;flex-direction:column;min-width:0}
+.ak-pk-row b{color:var(--txt,#e8ebf0);font-size:14px}
+.ak-pk-row small{color:var(--dim,#8b93a3);font-size:12px}
+.ak-pk-row button{color:var(--danger,#ff6b6b);font-size:13px;font-weight:700;background:none;border:none;cursor:pointer;font-family:inherit}
 .ak-toast{position:fixed;left:50%;transform:translateX(-50%) translateY(20px);bottom:calc(150px + env(safe-area-inset-bottom,0px));background:var(--card2,#20242e);color:var(--txt,#e8ebf0);border:1px solid var(--line,#2a2f3a);border-radius:12px;padding:10px 16px;z-index:300;opacity:0;transition:.2s;font:14px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;pointer-events:none;box-shadow:0 8px 24px rgba(0,0,0,.4)}
 .ak-toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 `;
@@ -281,7 +294,15 @@
     ui.lockMsg.hidden = true;
     ui.lockMsg.setAttribute("role", "alert");
     ui.scanBtn = scanButton(() => openScanner({ onCode: (code) => auth.submitKey(code), refocus: () => ui.lockInput.focus() }));
-    card.append(logo, el("div", "ak-lock-sub", T.lockSub), fieldRow(ui.lockInput, ui.scanBtn), ui.lockBtn, ui.retryBtn);
+    // «Войти с пасскеем» (INTEGRATION.md §11.3): текстовая кнопка во всю ширину под строкой «поле и сканер»;
+    // если на этом устройстве пасскей уже создавали, она главная и стоит выше поля
+    ui.pkBtn = el("button", "ak-pk", T.passkeyLogin);
+    ui.pkBtn.type = "button";
+    ui.pkBtn.hidden = true;
+    ui.pkBtn.onclick = async () => { await auth.loginWithPasskey(); };
+    ui.lockSub = el("div", "ak-lock-sub", T.lockSub);
+    ui.lockField = fieldRow(ui.lockInput, ui.scanBtn);
+    card.append(logo, ui.lockSub, ui.lockField, ui.pkBtn, ui.lockBtn, ui.retryBtn);
     ui.lock.append(ui.lockMsg, card);
 
     // верхняя плашка «смотрю как…»
@@ -329,6 +350,29 @@
     }));
     ui.sheet.append(el("div", "ak-grab"), el("h3", null, T.addTitle), el("p", "ak-hint", T.addHint), fieldRow(ui.addInput, ui.sheetScan), ui.addErr, go);
 
+    // предложение создать пасскей после входа (§11.2)
+    ui.offerBg = el("div", "ak-sheet-bg");
+    ui.offer = el("div", "ak-sheet");
+    ui.offerTitle = el("h3");
+    ui.offerText = el("p", "ak-hint");
+    ui.offerCreate = el("button", "ak-save");
+    ui.offerLater = el("button", "ak-retry");
+    ui.offerNever = el("button", "ak-link");
+    for (const b of [ui.offerCreate, ui.offerLater, ui.offerNever]) b.type = "button";
+    ui.offerCreate.onclick = async () => {
+      ui.offerCreate.disabled = true;
+      const r = await auth.passkeyOfferCreate();
+      ui.offerCreate.disabled = false;
+      if (!r.ok && r.error) showToast(r.error); // закрытое окно (error null) ничего не показывает; при ошибке предложение остаётся
+      if (r.ok) loadPasskeys(true);
+    };
+    ui.offerLater.onclick = () => auth.passkeyOfferLater();
+    ui.offerNever.onclick = () => auth.passkeyOfferNever();
+    ui.offerBg.onclick = () => auth.passkeyOfferLater();
+    const offerBtns = el("div", "ak-offer-btns");
+    offerBtns.append(ui.offerCreate, ui.offerLater, ui.offerNever);
+    ui.offer.append(el("div", "ak-grab"), ui.offerTitle, ui.offerText, offerBtns);
+
     // карточка «Вы вошли как…» в настройках приложения
     const whoHost = resolve(options.whoMount);
     if (whoHost) {
@@ -357,10 +401,13 @@
         openSheet();
         setTimeout(() => { try { ui.addInput.focus(); } catch {} }, 80);
       };
-      ui.who.append(top, ui.as, ui.accList, ui.switchBtn);
+      // пасскеи (§11.4): список своих, «Удалить», «Создать пасскей»; виден только при ключе самого человека
+      ui.pk = el("div", "ak-pk-box");
+      ui.pk.hidden = true;
+      ui.who.append(top, ui.as, ui.accList, ui.switchBtn, ui.pk);
       whoHost.replaceChildren(ui.who);
     }
-    document.body.append(ui.lock, ui.sheetBg, ui.sheet, ui.toast);
+    document.body.append(ui.lock, ui.sheetBg, ui.sheet, ui.offerBg, ui.offer, ui.toast);
 
     /* ---- отрисовка состояния ядра ---- */
     function renderAccounts(accounts) {
@@ -386,6 +433,50 @@
       ui.accList.hidden = false;
     }
 
+    // Раздел «Пасскеи» в карточке: список берётся с сервера при показе и после каждого изменения
+    let pkFor = "";
+    async function loadPasskeys(force) {
+      if (!ui.pk) return;
+      const c = auth.state.card && auth.state.card.passkeys;
+      if (!c) { ui.pk.hidden = true; pkFor = ""; return; }
+      const mark = auth.getKey();
+      if (!force && pkFor === mark) return;
+      pkFor = mark;
+      const [r, available] = await Promise.all([auth.listPasskeys(), auth.passkeyAvailable()]);
+      if (!r.ok) { ui.pk.hidden = true; pkFor = ""; return; }
+      const title = el("b", null, c.title);
+      const rows = r.items.length ? r.items.map((p) => {
+        const row = el("div", "ak-pk-row");
+        const left = el("span");
+        left.append(el("b", null, p.name), el("small", null, p.sub));
+        const del = el("button", null, p.removeLabel);
+        del.type = "button";
+        del.onclick = async () => {
+          const q = auth.removePasskeyRequest(p.id);
+          if (!confirm(q.text)) return;
+          const res = await q.perform();
+          if (!res.ok && res.error) showToast(res.error);
+          loadPasskeys(true);
+        };
+        row.append(left, del);
+        return row;
+      }) : [el("small", "ak-hint", c.noneText)];
+      const kids = [title, ...rows];
+      if (available && r.canCreate) {
+        const add = el("button", "ak-switch", c.createLabel);
+        add.type = "button";
+        add.onclick = async () => {
+          add.disabled = true;
+          const res = await auth.createPasskey();
+          if (!res.ok && res.error) showToast(res.error);
+          loadPasskeys(true);
+        };
+        kids.push(add);
+      }
+      ui.pk.replaceChildren(...kids);
+      ui.pk.hidden = false;
+    }
+
     function render(s) {
       // экран ввода
       const locked = s.phase === "locked";
@@ -394,7 +485,25 @@
       ui.lockMsg.hidden = !s.lock.message;
       ui.lockMsg.classList.toggle("info", s.lock.kind === "info");
       ui.retryBtn.hidden = !s.lock.canRetry;
-      ui.retryBtn.disabled = ui.lockBtn.disabled = s.lock.checking;
+      ui.retryBtn.disabled = ui.lockBtn.disabled = ui.pkBtn.disabled = s.lock.checking;
+      const pk = s.lock.passkey;
+      ui.pkBtn.hidden = !pk.show;
+      ui.pkBtn.textContent = pk.label;
+      ui.pkBtn.classList.toggle("primary", pk.primary);
+      // главная кнопка стоит выше поля, второстепенная под ним
+      if (pk.primary) ui.lockSub.after(ui.pkBtn); else ui.lockField.after(ui.pkBtn);
+
+      // предложение создать пасскей
+      const offer = s.offer;
+      if (offer) {
+        ui.offerTitle.textContent = offer.title;
+        ui.offerText.textContent = offer.text;
+        ui.offerCreate.textContent = offer.createLabel;
+        ui.offerLater.textContent = offer.laterLabel;
+        ui.offerNever.textContent = offer.neverLabel;
+      }
+      ui.offerBg.classList.toggle("open", !!offer);
+      ui.offer.classList.toggle("open", !!offer);
       if (locked && prevPhase !== "locked") {
         ui.lockInput.value = "";
         setTimeout(() => { try { ui.lockInput.focus(); } catch {} }, 60);
@@ -431,6 +540,7 @@
         ui.switchBtn.hidden = !c.canAddKey;
         renderAccounts(c.accounts);
         ui.who.hidden = false;
+        loadPasskeys(false);
       }
     }
 
