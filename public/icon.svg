@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#22386b"/>
+      <stop offset="1" stop-color="#0b1020"/>
+    </linearGradient>
+    <linearGradient id="bell" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#8fc0ff"/>
+      <stop offset="1" stop-color="#3d7be0"/>
+    </linearGradient>
+    <linearGradient id="bar" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#cdd6e6"/>
+      <stop offset="1" stop-color="#8d99b3"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" fill="url(#bg)"/>
+  <g transform="translate(256 256) scale(.86) translate(-256 -256)">
+    <!-- задняя карточка: «прошлая тренировка» -->
+    <g transform="rotate(-9 256 240)" opacity=".4">
+      <rect x="128" y="86" width="256" height="300" rx="16" fill="#fff"/>
+    </g>
+    <!-- карточка тренировки -->
+    <g transform="rotate(5 256 240)">
+      <rect x="128" y="86" width="256" height="300" rx="16" fill="#fff" stroke="#00000022" stroke-width="2"/>
+      <!-- заголовок -->
+      <rect x="152" y="114" width="96" height="14" rx="7" fill="#1b2438"/>
+      <rect x="152" y="138" width="60" height="9" rx="4.5" fill="#c6cfdf"/>
+      <circle cx="350" cy="128" r="17" fill="#34c77b"/>
+      <path d="M341 128 l7 7 l12 -14" fill="none" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <!-- подходы -->
+      <g fill="#dbe7ff">
+        <rect x="152" y="176" width="64" height="34" rx="11"/>
+        <rect x="224" y="176" width="64" height="34" rx="11"/>
+        <rect x="296" y="176" width="64" height="34" rx="11"/>
+        <rect x="152" y="222" width="64" height="34" rx="11"/>
+        <rect x="224" y="222" width="64" height="34" rx="11"/>
+      </g>
+      <g fill="#3d7be0">
+        <rect x="164" y="189" width="40" height="8" rx="4"/>
+        <rect x="236" y="189" width="40" height="8" rx="4"/>
+        <rect x="308" y="189" width="40" height="8" rx="4"/>
+        <rect x="164" y="235" width="40" height="8" rx="4"/>
+        <rect x="236" y="235" width="40" height="8" rx="4"/>
+      </g>
+      <rect x="296" y="222" width="64" height="34" rx="11" fill="none" stroke="#9db8ee" stroke-width="3" stroke-dasharray="7 6"/>
+      <!-- прогресс -->
+      <rect x="152" y="290" width="208" height="12" rx="6" fill="#e5ebf7"/>
+      <rect x="152" y="290" width="136" height="12" rx="6" fill="#34c77b"/>
+    </g>
+    <!-- гантель поверх -->
+    <g transform="rotate(-32 356 372)">
+      <rect x="256" y="360" width="200" height="24" rx="8" fill="url(#bar)"/>
+      <rect x="262" y="318" width="34" height="108" rx="12" fill="url(#bell)"/>
+      <rect x="300" y="334" width="24" height="76" rx="9" fill="url(#bell)"/>
+      <rect x="416" y="318" width="34" height="108" rx="12" fill="url(#bell)"/>
+      <rect x="388" y="334" width="24" height="76" rx="9" fill="url(#bell)"/>
+      <g fill="#fff" fill-opacity=".35">
+        <rect x="268" y="326" width="8" height="92" rx="4"/>
+        <rect x="422" y="326" width="8" height="92" rx="4"/>
+      </g>
+    </g>
+  </g>
+</svg>
