@@ -110,7 +110,7 @@ export async function passkeyResponse(request, env, projectId) {
     else if (!area) r = await env.VAULT.passkeyList(key, projectId, ip);
     else if (area === "register" && step === "begin") r = await env.VAULT.passkeyRegisterBegin(key, projectId, rp, ip);
     else if (area === "register") r = await env.VAULT.passkeyRegisterFinish(key, projectId, rp, body.name, body.credential, ip);
-    else if (step === "begin") r = await env.VAULT.passkeyLoginBegin(projectId, rp);
+    else if (step === "begin") r = await env.VAULT.passkeyLoginBegin(projectId, rp, ip);
     else r = await env.VAULT.passkeyLoginFinish(projectId, rp, body.credential, ip);
   } catch {
     return json({ error: "auth_unavailable" }, 503);

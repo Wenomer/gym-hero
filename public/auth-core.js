@@ -314,6 +314,11 @@
     const PK_LATER_MS = 30 * 24 * 3600 * 1000;
     const pkStore = () => { try { const v = JSON.parse(lsGet(PK_LS) || "{}"); return v && typeof v === "object" ? v : {}; } catch { return {}; } };
     const pkSave = (patch) => lsSet(PK_LS, JSON.stringify({ ...pkStore(), ...patch }));
+    // Сайт со страницей входа (§9) после входа перезагружает страницу и предложение пропало бы: пометка «предложить» живёт в sessionStorage до первого показа
+    const PK_PENDING = cfg.storagePrefix + "_pk_offer";
+    const ssGet = (k) => { try { return root.sessionStorage.getItem(k); } catch { return null; } };
+    const ssSet = (k, v) => { try { root.sessionStorage.setItem(k, v); } catch {} };
+    const ssDel = (k) => { try { root.sessionStorage.removeItem(k); } catch {} };
     const nav = () => root.navigator;
     // WebAuthn есть, страница на HTTPS и не во фрейме
     function webauthnSupported() {
@@ -464,9 +469,11 @@
       if (!me || me.impersonate || me.readonly) return;
       const pk = pkStore();
       if (pk.never || pk.made || (pk.later && Date.now() - pk.later < PK_LATER_MS)) return;
-      if (!(await passkeyAvailable()) || state.phase !== "ready") return;
+      if (cfg.offer === false || !(await passkeyAvailable()) || state.phase !== "ready") return; // offer: false, пока страница сама перезагрузится (session-bridge на странице входа)
+      ssDel(PK_PENDING);
       setState({ offer: { title: T.passkeyOfferTitle, text: T.passkeyOfferText, createLabel: T.passkeyCreate, laterLabel: T.passkeyLater, neverLabel: T.passkeyNever } });
     }
+    const offerAfterLogin = (me) => { ssSet(PK_PENDING, "1"); return maybeOffer(me); };
     const passkeyOfferCreate = () => createPasskey(); // успех сам убирает предложение; при ошибке оно остаётся
     const passkeyOfferLater = () => { pkSave({ later: Date.now() }); setState({ offer: null }); };
     const passkeyOfferNever = () => { pkSave({ never: true }); setState({ offer: null }); };
@@ -491,7 +498,7 @@
         if (!c.ok) { setState({ lock: lockState(c.error, "error", false) }); return c; }
         setKey(c.key);
         await checkStored();
-        if (state.phase === "ready") { maybeOffer(ME); return { ok: true }; }
+        if (state.phase === "ready") { offerAfterLogin(ME); return { ok: true }; }
         return { ok: false, error: state.lock.message };
       }
       const p = await probe(k);
@@ -502,7 +509,7 @@
       }
       setKey(k);
       loggedIn(p.me);
-      maybeOffer(p.me);
+      offerAfterLogin(p.me);
       return { ok: true };
     }
 
@@ -573,7 +580,11 @@
       if (p.status === 401) { keyGone(key); return; }
       showLock(lockProblem(p.status));
     }
-    async function start() { await checkStored(); }
+    async function start() {
+      await checkStored();
+      // Страница перезагружена после ручного входа: показать отложенное предложение (один раз)
+      if (state.phase === "ready" && cfg.offer !== false && ssGet(PK_PENDING)) { ssDel(PK_PENDING); maybeOffer(ME); }
+    }
     // Кнопка «Попробовать ещё раз»: тот же разбор, что при запуске.
     async function retry() {
       if (!getKey()) { showLock(""); return; }

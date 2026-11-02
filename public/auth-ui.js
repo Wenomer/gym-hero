@@ -139,7 +139,7 @@
 
   function init(options = {}) {
     const logoCfg = { text: "", accent: "", suffix: "", ...(options.logo || {}) };
-    const auth = root.authKitCore.create({ storagePrefix: options.storagePrefix, apiBase: options.apiBase });
+    const auth = root.authKitCore.create({ storagePrefix: options.storagePrefix, apiBase: options.apiBase, offer: options.offer });
     const ui = {};
     let prevPhase = null;
     let toastTimer = null;
