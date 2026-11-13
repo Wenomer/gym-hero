@@ -13,12 +13,13 @@
 
 import { authenticate, meResponse, json } from './auth-kit.js';
 
+// Ключ = имя маршрута API (/api/sets), name = полное имя таблицы в общей базе looneyhome_database (префикс gym_hero_).
 const TABLES = {
-  equipment: { cols: ['id','user_id','name','has_weight','default_weight','loading'], json: ['loading'] },
-  exercises: { cols: ['id','user_id','name','equipment_id','bilateral','default_weight','notes'], json: [] },
-  routines:  { cols: ['id','user_id','name','exercise_ids','created_at'], json: ['exercise_ids'] },
-  workouts:  { cols: ['id','user_id','date','name','type','laps','started_at','ended_at','planned_exercise_ids','created_at'], json: ['laps','planned_exercise_ids'] },
-  sets:      { cols: ['id','user_id','date','exercise_id','workout_id','weight','reps','reps_r','note','created_at'], json: [] },
+  equipment: { name: 'gym_hero_equipment', cols: ['id','user_id','name','has_weight','default_weight','loading'], json: ['loading'] },
+  exercises: { name: 'gym_hero_exercises', cols: ['id','user_id','name','equipment_id','bilateral','default_weight','notes'], json: [] },
+  routines:  { name: 'gym_hero_routines',  cols: ['id','user_id','name','exercise_ids','created_at'], json: ['exercise_ids'] },
+  workouts:  { name: 'gym_hero_workouts',  cols: ['id','user_id','date','name','type','laps','started_at','ended_at','planned_exercise_ids','created_at'], json: ['laps','planned_exercise_ids'] },
+  sets:      { name: 'gym_hero_sets',      cols: ['id','user_id','date','exercise_id','workout_id','weight','reps','reps_r','note','created_at'], json: [] },
 };
 const ORDERED = { sets: 'created_at', workouts: 'created_at' }; // ASC по created_at
 
@@ -72,7 +73,7 @@ export async function onRequest(context) {
   // DELETE /api/all
   if (parts[0] === 'all' && method === 'DELETE') {
     for (const table of Object.keys(TABLES)) {
-      await db.prepare(`DELETE FROM ${table} WHERE user_id=?`).bind(user).run();
+      await db.prepare(`DELETE FROM ${TABLES[table].name} WHERE user_id=?`).bind(user).run();
     }
     return json({ ok: true });
   }
@@ -82,7 +83,7 @@ export async function onRequest(context) {
   const id = parts[1];
 
   if (method === 'GET') {
-    let sql = `SELECT * FROM ${table} WHERE user_id=?`;
+    let sql = `SELECT * FROM ${TABLES[table].name} WHERE user_id=?`;
     const bind = [user];
     const date = url.searchParams.get('date');
     if (date && TABLES[table].cols.includes('date')) { sql += ' AND date=?'; bind.push(date); }
@@ -109,7 +110,7 @@ export async function onRequest(context) {
     }
     if (sets.length) {
       bind.push(id, user);
-      await db.prepare(`UPDATE ${table} SET ${sets.join(',')} WHERE id=? AND user_id=?`).bind(...bind).run();
+      await db.prepare(`UPDATE ${def.name} SET ${sets.join(',')} WHERE id=? AND user_id=?`).bind(...bind).run();
     }
     return json({ ok: true });
   }
@@ -117,10 +118,10 @@ export async function onRequest(context) {
   if (method === 'DELETE') {
     if (!id) return json({ error: 'id_required' }, 400);
     // каскады: тренировка сносит свои подходы, упражнение подходы, снаряд отвязывается от упражнений
-    if (table === 'workouts') await db.prepare('DELETE FROM sets WHERE workout_id=? AND user_id=?').bind(id, user).run();
-    if (table === 'exercises') await db.prepare('DELETE FROM sets WHERE exercise_id=? AND user_id=?').bind(id, user).run();
-    if (table === 'equipment') await db.prepare('UPDATE exercises SET equipment_id=NULL WHERE equipment_id=? AND user_id=?').bind(id, user).run();
-    await db.prepare(`DELETE FROM ${table} WHERE id=? AND user_id=?`).bind(id, user).run();
+    if (table === 'workouts') await db.prepare(`DELETE FROM ${TABLES.sets.name} WHERE workout_id=? AND user_id=?`).bind(id, user).run();
+    if (table === 'exercises') await db.prepare(`DELETE FROM ${TABLES.sets.name} WHERE exercise_id=? AND user_id=?`).bind(id, user).run();
+    if (table === 'equipment') await db.prepare(`UPDATE ${TABLES.exercises.name} SET equipment_id=NULL WHERE equipment_id=? AND user_id=?`).bind(id, user).run();
+    await db.prepare(`DELETE FROM ${TABLES[table].name} WHERE id=? AND user_id=?`).bind(id, user).run();
     return json({ ok: true });
   }
 
@@ -134,7 +135,7 @@ async function insertRow(db, table, rec, user) {
   const cols = def.cols.filter(c => c in row);
   const vals = cols.map(c => valueIn(table, c, row[c]) ?? null);
   const ph = cols.map(() => '?').join(',');
-  await db.prepare(`INSERT INTO ${table} (${cols.join(',')}) VALUES (${ph})`).bind(...vals).run();
+  await db.prepare(`INSERT INTO ${def.name} (${cols.join(',')}) VALUES (${ph})`).bind(...vals).run();
   // вернуть то, что реально записали (created_at и т.п.)
   const out = {};
   for (const c of def.cols) out[c] = c in row ? row[c] : null;
@@ -149,6 +150,6 @@ async function upsert(db, table, rec, user) {
   const cols = def.cols.filter(c => c in row);
   const vals = cols.map(c => valueIn(table, c, row[c]) ?? null);
   const ph = cols.map(() => '?').join(',');
-  await db.prepare(`INSERT OR REPLACE INTO ${table} (${cols.join(',')}) VALUES (${ph})`).bind(...vals).run();
+  await db.prepare(`INSERT OR REPLACE INTO ${def.name} (${cols.join(',')}) VALUES (${ph})`).bind(...vals).run();
   return 1;
 }

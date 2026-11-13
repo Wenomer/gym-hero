@@ -6,9 +6,9 @@
   "scripts": {
     "dev": "wrangler pages dev public",
     "deploy": "wrangler pages deploy public --project-name gym-hero --branch master",
-    "db:schema": "wrangler d1 execute gym-hero --remote --file=schema.sql",
-    "db:schema:local": "wrangler d1 execute gym-hero --local --file=schema.sql",
-    "db:backup": "wrangler d1 export gym-hero --remote --output=gym-hero-backup.sql"
+    "db:migrate:local": "wrangler d1 migrations apply looneyhome_database --local",
+    "db:migrate": "wrangler d1 migrations apply looneyhome_database --remote",
+    "db:backup": "wrangler d1 export looneyhome_database --remote --output ~/d1-backups/looneyhome_database-$(date +%F).sql"
   },
   "devDependencies": {
     "wrangler": "^4"

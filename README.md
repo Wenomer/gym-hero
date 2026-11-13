@@ -12,10 +12,10 @@
 | `functions/api/[[path]].js` | API на Cloudflare Pages Functions поверх D1 (оборудование, упражнения, шаблоны, тренировки, подходы) |
 | `functions/api/auth-kit.js` | серверный клиент auth-kit |
 | `functions/api/claim.js`, `functions/api/passkey/[[path]].js` | вход по одноразовому коду и по пасскею |
-| `schema.sql` | схема D1 |
-| `wrangler.toml` | проект Pages, база `DB` (D1 `gym-hero`) и привязка `VAULT` к сервису auth-kit |
+| `migrations/` | схема в общей D1 `looneyhome_database` (таблицы с префиксом `gym_hero_`), миграции только вперёд |
+| `wrangler.toml` | проект Pages, база `DB` (общая D1 `looneyhome_database`) и привязка `VAULT` к сервису auth-kit |
 
-Данные лежат в D1, у каждой записи есть `user_id`, и человек видит только свои.
+Данные лежат в общей D1 `looneyhome_database` в таблицах `gym_hero_*`, у каждой записи есть `user_id`, и человек видит только свои. Старая база `gym-hero` оставлена как резерв.
 
 ## Вход и доступ
 
@@ -32,8 +32,9 @@
 npm install            # wrangler
 npm run dev            # локальный сервер Pages (http://localhost:8788)
 npm run deploy         # выкат в прод
-npm run db:schema      # применить schema.sql к боевой D1
-npm run db:backup      # выгрузить боевую D1 в gym-hero-backup.sql
+npm run db:migrate:local   # миграции в локальную D1
+npm run db:migrate         # миграции в общую боевую D1 (до деплоя кода, по одному сервису за раз)
+npm run db:backup          # выгрузить общую боевую D1 в ~/d1-backups/ (делать перед каждой миграцией)
 ```
 
 Локально без запущенного auth-kit привязка `VAULT` недоступна, и API отвечает 500 `no_vault_binding`. Для отладки интерфейса удобнее всего временный мок сервера на `/api/*`, а в проде всё проверяется на самом `gym-hero.pages.dev`.

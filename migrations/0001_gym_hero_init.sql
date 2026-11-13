@@ -1,7 +1,8 @@
--- Gym Hero — схема D1 (SQLite).
+-- Общая база looneyhome_database: все таблицы и индексы сервиса с префиксом gym_hero_
 -- boolean хранится как INTEGER 0/1, JSON-поля как TEXT(JSON), время как TEXT(ISO).
+-- user_id: числовой userId из auth-kit строкой (String(who.userId)).
 
-CREATE TABLE IF NOT EXISTS equipment (
+CREATE TABLE gym_hero_equipment (
   id             TEXT PRIMARY KEY,
   user_id        TEXT NOT NULL,
   name           TEXT NOT NULL,
@@ -10,7 +11,7 @@ CREATE TABLE IF NOT EXISTS equipment (
   loading        TEXT                       -- JSON | NULL
 );
 
-CREATE TABLE IF NOT EXISTS exercises (
+CREATE TABLE gym_hero_exercises (
   id             TEXT PRIMARY KEY,
   user_id        TEXT NOT NULL,
   name           TEXT NOT NULL,
@@ -20,7 +21,7 @@ CREATE TABLE IF NOT EXISTS exercises (
   notes          TEXT NOT NULL DEFAULT ''
 );
 
-CREATE TABLE IF NOT EXISTS workouts (
+CREATE TABLE gym_hero_workouts (
   id                   TEXT PRIMARY KEY,
   user_id              TEXT NOT NULL,
   date                 TEXT NOT NULL,
@@ -32,9 +33,9 @@ CREATE TABLE IF NOT EXISTS workouts (
   planned_exercise_ids TEXT,                 -- JSON array | NULL
   created_at           TEXT NOT NULL
 );
-CREATE INDEX IF NOT EXISTS idx_wk_user_date ON workouts(user_id, date);
+CREATE INDEX idx_gym_hero_workouts_user_date ON gym_hero_workouts(user_id, date);
 
-CREATE TABLE IF NOT EXISTS sets (
+CREATE TABLE gym_hero_sets (
   id          TEXT PRIMARY KEY,
   user_id     TEXT NOT NULL,
   date        TEXT NOT NULL,
@@ -46,10 +47,10 @@ CREATE TABLE IF NOT EXISTS sets (
   note        TEXT NOT NULL DEFAULT '',
   created_at  TEXT NOT NULL
 );
-CREATE INDEX IF NOT EXISTS idx_sets_user_date ON sets(user_id, date);
-CREATE INDEX IF NOT EXISTS idx_sets_workout  ON sets(workout_id);
+CREATE INDEX idx_gym_hero_sets_user_date ON gym_hero_sets(user_id, date);
+CREATE INDEX idx_gym_hero_sets_workout   ON gym_hero_sets(workout_id);
 
-CREATE TABLE IF NOT EXISTS routines (
+CREATE TABLE gym_hero_routines (
   id           TEXT PRIMARY KEY,
   user_id      TEXT NOT NULL,
   name         TEXT NOT NULL DEFAULT '',
